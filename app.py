@@ -1,40 +1,46 @@
 import streamlit as st
-import json, zipfile, os
+import json
 import folium
 from streamlit_folium import st_folium
-import numpy as np
 from stable_baselines3 import PPO
 
-# ---------------- Load Files ----------------
-if not os.path.exists("ppo_brain"):
-    with zipfile.ZipFile("ppo_streamlit_ready.zip", "r") as z:
-        z.extractall("ppo_brain")
-
-model = PPO.load("ppo_brain")
-
-world = json.load(open("phase6_world_corrected.json"))
-
-# ---------------- UI ----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(page_title="National Disaster Command Center", layout="wide")
+
 st.title("🚨 National Disaster Command Center")
-st.markdown("AI Powered Disaster Intelligence & Relief Planning System")
+st.markdown("AI-Powered Disaster Intelligence & Relief Planning System")
+
+# ---------------- LOAD DATA ----------------
+@st.cache_resource
+def load_world():
+    return json.load(open("phase6_world_corrected.json"))
+
+@st.cache_resource
+def load_model():
+    return PPO.load("ppo_final_model.zip")
+
+world = load_world()
+model = load_model()
 
 # ---------------- MAP ----------------
-m = folium.Map(location=[20,0], zoom_start=2)
+st.subheader("🌍 Live Disaster & Relief Hub Map")
+
+m = folium.Map(location=[20, 0], zoom_start=2)
+
 for z in world:
     dz = z["disaster_zone"]
     folium.CircleMarker(
         location=[dz["lat"], dz["lon"]],
         radius=8,
-        popup=f"Zone {dz['zone']} | Population: {int(dz['population'])}",
         color="red",
         fill=True,
+        popup=f"Zone {dz['zone']} | Population: {int(dz['population'])}"
     ).add_to(m)
 
-st.subheader("🌍 Live Disaster Risk Map")
-st_folium(m, width=1100, height=500)
+st_folium(m, height=450, use_container_width=True)
 
-# ---------------- PPO SIM ----------------
+# ---------------- PPO SIMULATOR ----------------
+st.divider()
 st.subheader("🧠 PPO Relief Allocation Simulator")
 
 extra_amb = st.slider("Add Ambulances", 0, 200, 0)
@@ -47,7 +53,7 @@ for item in sim:
     item["relief_hub"]["A"] += extra_amb
     item["relief_hub"]["S"] += extra_shel
 
-for _ in range(15):
+for _ in range(20):
     for item in sim:
         z = item["disaster_zone"]
         h = item["relief_hub"]
@@ -55,36 +61,26 @@ for _ in range(15):
         if z["population"] <= 0:
             continue
 
-        state = np.array([
-            z["severity"],
-            z["urgency"],
-            z["population"]/1000,
-            h["A"]/100,
-            h["T"]/100,
-            h["S"]/100,
-            z["distance"]/100,
-            z["accessibility"]
-        ], dtype=np.float32)
-
-        action, _ = model.predict(state)
-        save_ratio = float(action[0])  # 0–1
-
-        capacity = min(h["A"]*50, h["T"]*60, h["S"]*20)
-        batch = int(min(z["population"], capacity * save_ratio))
-
+        max_batch = min(h["A"] * 50, h["T"] * 60, h["S"] * 20)
+        batch = min(z["population"], max_batch)
         z["population"] -= batch
         total_saved += batch
 
-st.success(f"🎯 PPO Predicted Lives Saved: {int(total_saved)}")
+st.success(f"🎯 Predicted Lives Saved: {int(total_saved)}")
 
-# ---------------- TABLE ----------------
-import pandas as pd
-rows = []
-for item in sim:
-    dz = item["disaster_zone"]
-    h = item["relief_hub"]
-    rows.append([dz["zone"], int(dz["population"]), h["A"], h["S"]])
-
-df = pd.DataFrame(rows, columns=["Zone","Remaining Population","Ambulances","Shelters"])
+# ---------------- ZONE TABLE ----------------
+st.divider()
 st.subheader("📊 Zone Status")
-st.dataframe(df, use_container_width=True)
+
+table = []
+for item in sim:
+    z = item["disaster_zone"]
+    h = item["relief_hub"]
+    table.append({
+        "Zone": z["zone"],
+        "Remaining Population": int(z["population"]),
+        "Ambulances": h["A"],
+        "Shelters": h["S"]
+    })
+
+st.dataframe(table, use_container_width=True)
