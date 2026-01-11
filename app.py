@@ -13,7 +13,8 @@ if not os.path.exists("ppo_disaster_brain_v4"):
 world = json.load(open("phase6_world_corrected.json"))
 
 # Load PPO model
-model = PPO.load("ppo_disaster_brain_v4/policy.pth")
+model = PPO.load("ppo_streamlit_ready.zip")
+
 
 
 # ---------------- UI ----------------
