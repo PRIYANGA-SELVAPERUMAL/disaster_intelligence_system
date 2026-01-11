@@ -1,44 +1,45 @@
 import streamlit as st
-import json, zipfile, os
+import json, pandas as pd
 import folium
 from streamlit_folium import st_folium
 from stable_baselines3 import PPO
 
-# Unzip PPO brain if needed
-if not os.path.exists("ppo_disaster_brain_v4"):
-    with zipfile.ZipFile("ppo_disaster_brain_v4.zip", "r") as z:
-        z.extractall("ppo_disaster_brain_v4")
+st.set_page_config(page_title="National Disaster Command Center", layout="wide")
 
-# Load world + resources
+st.title("🚨 National Disaster Command Center")
+st.markdown("AI-Powered Disaster Intelligence & Relief Planning System")
+
+# Load world
 world = json.load(open("phase6_world_corrected.json"))
 
-# Load PPO model
+# Load PPO brain
 model = PPO.load("ppo_streamlit_ready.zip")
 
-
-
-# ---------------- UI ----------------
-st.set_page_config(page_title="National Disaster Command Center", layout="wide")
-st.title("🚨 National Disaster Command Center")
-st.markdown("AI Powered Disaster Intelligence & Relief Planning System")
-
-# -------- MAP --------
+# ---------------- MAP ----------------
+st.subheader("🌍 Live Disaster & Relief Hub Map")
 m = folium.Map(location=[20,0], zoom_start=2)
 
 for z in world:
     dz = z["disaster_zone"]
+    h = z["relief_hub"]
+
     folium.CircleMarker(
-        location=[dz["lat"], dz["lon"]],
+        [dz["lat"], dz["lon"]],
         radius=8,
         popup=f"Zone {dz['zone']} | Population: {int(dz['population'])}",
         color="red",
         fill=True,
     ).add_to(m)
 
-st.subheader("🌍 Live Disaster Risk Map")
-st_folium(m, width=1100, height=500)
+    folium.Marker(
+        [h["lat"], h["lon"]],
+        icon=folium.Icon(color="green", icon="plus"),
+        popup=f"{h['hub']} | A:{h['A']} | S:{h['S']}"
+    ).add_to(m)
 
-# -------- SIMULATOR --------
+st_folium(m, width=1200, height=500)
+
+# ---------------- SIMULATOR ----------------
 st.subheader("🧠 PPO Relief Allocation Simulator")
 
 extra_amb = st.slider("Add Ambulances", 0, 200, 0)
@@ -62,4 +63,17 @@ for _ in range(20):
         z["population"] -= batch
         total_saved += batch
 
-st.success(f"Predicted Lives Saved: {int(total_saved)}")
+st.success(f"🛟 Predicted Lives Saved: {int(total_saved)}")
+
+# ---------------- TABLE ----------------
+rows = []
+for i in sim:
+    rows.append({
+        "Zone": i["disaster_zone"]["zone"],
+        "Remaining Population": int(i["disaster_zone"]["population"]),
+        "Ambulances": i["relief_hub"]["A"],
+        "Shelters": i["relief_hub"]["S"]
+    })
+
+st.subheader("📊 Zone Status")
+st.dataframe(pd.DataFrame(rows), use_container_width=True)
