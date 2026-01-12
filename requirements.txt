@@ -1,8 +1,10 @@
 streamlit
+streamlit-folium
 stable-baselines3
+gymnasium
 torch
-gym
-numpy
 pandas
 folium
-streamlit-folium
+networkx
+reportlab
+requests
