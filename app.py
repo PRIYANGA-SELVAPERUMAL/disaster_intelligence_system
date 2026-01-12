@@ -1,12 +1,13 @@
 import streamlit as st
 import json
+import requests
 import folium
+from datetime import datetime
 from streamlit_folium import st_folium
 from stable_baselines3 import PPO
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="National Disaster Command Center", layout="wide")
-
 st.title("🚨 National Disaster Command Center")
 st.markdown("AI-Powered Disaster Intelligence & Relief Planning System")
 
@@ -19,14 +20,32 @@ def load_world():
 def load_model():
     return PPO.load("ppo_final_model.zip")
 
+@st.cache_data(ttl=300)
+def get_live_earthquakes():
+    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
+    data = requests.get(url).json()
+    quakes = []
+    for f in data["features"]:
+        p = f["properties"]
+        g = f["geometry"]
+        quakes.append({
+            "place": p["place"],
+            "mag": p["mag"],
+            "time": datetime.utcfromtimestamp(p["time"]/1000),
+            "lat": g["coordinates"][1],
+            "lon": g["coordinates"][0]
+        })
+    return quakes
+
 world = load_world()
 model = load_model()
+quakes = get_live_earthquakes()
 
 # ---------------- MAP ----------------
 st.subheader("🌍 Live Disaster & Relief Hub Map")
-
 m = folium.Map(location=[20, 0], zoom_start=2)
 
+# Disaster zones
 for z in world:
     dz = z["disaster_zone"]
     folium.CircleMarker(
@@ -37,7 +56,26 @@ for z in world:
         popup=f"Zone {dz['zone']} | Population: {int(dz['population'])}"
     ).add_to(m)
 
-st_folium(m, height=450, use_container_width=True)
+# Live earthquakes
+for q in quakes:
+    if q["mag"] is None:
+        continue
+    folium.CircleMarker(
+        location=[q["lat"], q["lon"]],
+        radius=min(15, q["mag"] * 3),
+        color="orange",
+        fill=True,
+        popup=f"🌋 {q['place']} | M {q['mag']}"
+    ).add_to(m)
+
+st_folium(m, height=500, use_container_width=True)
+
+# ---------------- LIVE FEED ----------------
+st.subheader("📡 Live Earthquake Feed")
+st.dataframe(
+    [{"Place": q["place"], "Magnitude": q["mag"], "Time (UTC)": q["time"]} for q in quakes if q["mag"]],
+    use_container_width=True
+)
 
 # ---------------- PPO SIMULATOR ----------------
 st.divider()
